@@ -1,0 +1,72 @@
+####################################################################################################################
+####################################################################################################################
+#==================================
+# LASSO Simulated data
+#==================================
+
+set.seed(42) # Set seed for reproducibility
+
+n <- 100 # Number of observations.
+p <- 50  # Number of parameters (features) included in model.
+
+# Generate the data
+
+X <- matrix(rnorm(n*p), nrow=n, ncol=p)   # Randomly generated design matrix.
+y <- apply(X[,1:5],1,sum) + rnorm(n)      # Set up y as linearly dependent the first 5 X's and some noise.
+
+
+
+#===============================
+# Box Projection (-a<=lambda<=a)
+#===============================
+proj_box<-function(x,a,b)
+{ 
+  px=x
+  if (x>b){px=b}
+  else if (x<a) {px=a}
+  return(px)
+  
+}
+
+proj_c<-function(x,a,b)
+{
+pc=proj_box(x,a,b)
+return(pc)
+}
+
+
+#==========================
+# Gradient Descent (lambda)
+#==========================
+l.gradient <- function(X, y, lambda, a, b, alpha, max.iter){
+l.old <- lambda
+ for(i in 1:max.iter){
+   lambda_int <- l.old - alpha*(solve(t(X)%*%X)%*%l.old - solve(t(X)%*%X)%*%t(X)%*%y) # Gradient Descent for lambda
+   l.new <- c()
+   for(j in 1:length(lambda_int)){
+   l.new[j] <- proj_c(lambda_int[j], a, b)       # Box-Constrained Projection
+   }
+   
+   l.old <- l.new
+ }
+results <- list(l.new)
+return(results)
+}
+
+
+
+#======================
+# Execute
+#======================
+a <- 1  # Lasso Regression Coefficient
+upper.bound <- a
+lower.bound <- -a
+lambda.init <- rep(0.1, times=ncol(X))
+alpha <- 0.1
+max.iter <- 100
+results <- l.gradient(X, y, lambda.init, lower.bound, upper.bound, alpha, max.iter)
+results
+
+
+w <- solve(t(X)%*%X)%*%(t(X)%*%y-results[[1]])
+w

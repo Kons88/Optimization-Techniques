@@ -1,0 +1,508 @@
+#==============
+# Data Input
+#==============
+
+AAPL <- read.csv(file = "C:\\Users\\30697\\Desktop\\AAPL.csv", header = TRUE)
+MSFT <- read.csv(file = "C:\\Users\\30697\\Desktop\\MSFT.csv", header = TRUE)
+TSLA <- read.csv(file = "C:\\Users\\30697\\Desktop\\TSLA.csv", header = TRUE)
+AMD <- read.csv(file = "C:\\Users\\30697\\Desktop\\AMD.csv", header = TRUE)
+
+
+# Get the opening prices.
+
+AAPL.open <- AAPL[,2]
+MSFT.open <- MSFT[,2]
+TSLA.open <- TSLA[,2]
+AMD.open <- AMD[,2]
+
+
+# Get the closing prices.
+
+AAPL.close <- AAPL[,5]
+MSFT.close <- MSFT[,5]
+TSLA.close <- TSLA[,5]
+AMD.close <- AMD[,5]
+
+
+# Calculate the daily returns.
+
+AAPL.return <- (AAPL.close-AAPL.open)/AAPL.open
+MSFT.return <- (MSFT.close-MSFT.open)/MSFT.open
+TSLA.return <- (TSLA.close-AAPL.open)/TSLA.open
+AMD.return <- (AMD.close-AAPL.open)/AMD.open
+
+
+# Calculate the means of stock returns.
+
+m1 <- mean(AAPL.return)
+m2 <- mean(MSFT.return)
+m3 <- mean(TSLA.return)
+m4 <- mean(AMD.return)
+
+
+# De-mean our stock returns.
+
+AAPL.return.dm <- AAPL.return - m1
+MSFT.return.dm <- MSFT.return - m2
+TSLA.return.dm <- TSLA.return - m3
+AMD.return.dm <- AMD.return - m4
+
+
+# Combine it all in one matrix.
+
+D <- cbind(AAPL.return.dm, MSFT.return.dm, TSLA.return.dm, AMD.return.dm)
+
+
+# Calculate the Variance-Covariance Matrix.
+
+C <- t(D)%*%D/length(D[,1])
+
+# Make sure it's symmetrical.
+
+for(i in 1:4){
+  for(j in 1:4){
+   if(i!=j){
+   C[i,j]=C[j,i]
+   }
+  }
+}
+
+# Extra sure.
+
+C[1,2] <- C[2,1]
+C[1,3] <- C[3,1]
+C[2,3] <- C[3,2]
+
+
+
+#===========================
+# Gradient Calculation
+#===========================
+
+grad_vec<-function(x,C)
+{ delx=0.0001
+grad_vec=c()
+for(i in 1:length(x))
+{ x_old=x
+x_new=x
+x_old=x
+x_old[i]=x[i]-delx
+x_new[i]=x[i]+delx
+grad_vec[i]=(func_var_multi(x_new,C)-func_var_multi(x_old,C))/(2*delx)
+}
+return(grad_vec)  
+}
+
+
+
+#==================================
+# Set the function to be minimized
+#==================================
+
+func_var_multi <- function(w,C){
+  p_cov=t(w)%*%(C%*%w)
+ return(p_cov)
+}
+
+#================================
+# Affine and Cone Projections
+#================================
+
+
+proj_affine<-function(x,A,b)
+{
+  mat=A%*%t(A)
+  invmat=solve(mat)
+  mat1=t(A)%*%invmat
+  vec=A%*%x-b
+  pr1=mat1%*%vec
+  px=x-pr1
+  return(px)
+  
+}
+
+proj_pos_cone<-function(x)
+{
+  n=length(x)
+  px=rep(0,n)
+  for (i in 1:n){
+    px[i]=max(x[i],0)
+  }
+  
+  return(px)
+}
+
+# Set projection for affine constraints
+
+proj_c<-function(x)
+{
+  pc=proj_affine(x,A,b)
+  return(pc)
+}
+
+
+
+
+#=================================
+# Projected Gradient Scheme
+#=================================
+
+proj_grad<-function(x,C,alpha,epsilon,max_iter)
+{
+  n_iter=0
+  x_old=x
+  
+  for(k in 0:max_iter)
+  {
+    n_iter=n_iter+1
+    f_old=func_var_multi(x_old,C)
+    g_old=grad_vec(x_old,C)
+    d_old<- -g_old
+    x_new_interm=x_old+alpha*d_old  
+    x_new_interm2=proj_c(x_new_interm)    # this is the projection step on affine constraints.
+    x_new=proj_pos_cone(x_new_interm2)    # this is the projection step on the positive cone.
+    f_new=func_var_multi(x_new,C)
+    g_new=grad_vec(x_new,C)
+    if(abs(f_new-f_old)<epsilon | norm(x_new-x_old,"2")<epsilon)
+      # if(norm(grad,"2")<epsilon)
+    {break}
+    x_old=x_new
+    f_old=f_new
+    g_old=g_new
+  }
+  x_min=x_new
+  f_min=func_var_multi(x_min,C)
+  g_min=grad_vec(x_min,C)
+  n_g_min=norm(g_min,"2")
+  results=list(x_min,f_min,n_g_min,n_iter)
+  return(results)
+}
+
+
+
+
+####################################################################################################
+# Run for different m values
+####################################################################################################
+
+#===================================
+# Set up constraints (Execution 1)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.1 <- 0.2  # the target return.
+b <- c(m.1,1)
+
+
+
+#==============================
+# Execute 1 (for m = 0.2)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results1=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results1
+
+k.1 <- results1[[1]]
+var.1 <- t(k.1)%*%C%*%k.1
+
+
+
+
+####################################################################################################
+
+#===================================
+# Set up constraints (Execution 2)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.2 <- 0.5  # the target return.
+b <- c(m.2,1)
+
+
+
+#==============================
+# Execute 2 (for m = 0.5)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results2=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results2
+
+k.2 <- results2[[1]]
+var.2 <- t(k.2)%*%C%*%k.2
+
+
+
+
+####################################################################################################
+
+#===================================
+# Set up constraints (Execution 3)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.3 <- 0.7  # the target return.
+b <- c(m.3,1)
+
+
+
+#==============================
+# Execute 3 (for m = 0.7)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results3=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results3
+
+k.3 <- results3[[1]]
+var.3 <- t(k.3)%*%C%*%k.3
+
+
+
+
+####################################################################################################
+
+
+#===================================
+# Set up constraints (Execution 4)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.4 <- 0.35  # the target return.
+b <- c(m.4,1)
+
+
+
+#==============================
+# Execute 4 (for m = 0.35)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results4=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results4
+
+k.4 <- results4[[1]]
+var.4 <- t(k.4)%*%C%*%k.4
+
+
+
+####################################################################################################
+
+
+#===================================
+# Set up constraints (Execution 5)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.5 <- 0.11  # the target return.
+b <- c(m.5,1)
+
+
+
+#==============================
+# Execute 5 (for m = 0.11)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results5=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results5
+
+k.5 <- results5[[1]]
+var.5 <- t(k.5)%*%C%*%k.5
+
+
+
+
+####################################################################################################
+
+
+#===================================
+# Set up constraints (Execution 6)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.6 <- 0.9  # the target return.
+b <- c(m.6,1)
+
+
+
+#==============================
+# Execute 6 (for m = 0.9)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results6=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results6
+
+k.6 <- results6[[1]]
+var.6 <- t(k.6)%*%C%*%k.6
+
+
+
+
+####################################################################################################
+
+
+#===================================
+# Set up constraints (Execution 7)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.7 <- 0.45  # the target return.
+b <- c(m.7,1)
+
+
+
+#==============================
+# Execute 7 (for m = 0.45)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results7=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results7
+
+k.7 <- results7[[1]]
+var.7 <- t(k.7)%*%C%*%k.7
+
+
+
+
+####################################################################################################
+
+
+#===================================
+# Set up constraints (Execution 8)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.8 <- 0.61  # the target return.
+b <- c(m.8,1)
+
+
+
+#==============================
+# Execute 8 (for m = 0.61)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results8=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results8
+
+k.8 <- results8[[1]]
+var.8 <- t(k.8)%*%C%*%k.8
+
+
+
+
+####################################################################################################
+
+
+#===================================
+# Set up constraints (Execution 9)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.9 <- 0.06  # the target return.
+b <- c(m.9,1)
+
+
+
+#==============================
+# Execute 9 (for m = 0.06)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results9=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results9
+
+k.9 <- results9[[1]]
+var.9 <- t(k.9)%*%C%*%k.9
+
+
+
+####################################################################################################
+
+
+#===================================
+# Set up constraints (Execution 10)
+#===================================
+M <- cbind(m1, m2, m3, m4)
+ones <- rep(1, length(M))
+A <- rbind(M,ones)
+
+m.10 <- 0.57  # the target return.
+b <- c(m.10,1)
+
+
+
+#==============================
+# Execute 10 (for m = 0.06)
+#==============================
+
+x_init=rep(0,length(M))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results10=proj_grad(x_init,C, alpha, epsilon, max_iter)
+results10
+
+k.10 <- results10[[1]]
+var.10 <- t(k.10)%*%C%*%k.10
+
+
+
+#=======================================
+# Plot the Markowitz Efficient Frontier
+#=======================================
+
+expected.returns <- c(m.1, m.2, m.3, m.4, m.5, m.6, m.7, m.8, m.9, m.10)
+portfolio.variance <- c(var.1, var.2, var.3, var.4, var.5, var.6, var.7, var.8, var.9, var.10)
+
+plot(portfolio.variance, expected.returns, xlab = "Portfolio Variance", ylab = "Expected Returns", main = "Markowitz Efficient Frontier")
+lines(portfolio.variance[order(portfolio.variance)], expected.returns[order(portfolio.variance)], xlim=range(portfolio.variance), ylim=range(expected.returns), pch=16)

@@ -1,0 +1,126 @@
+####################################################################################################################
+####################################################################################################################
+#==================================
+# LASSO Simulated data
+#==================================
+
+set.seed(42) # Set seed for reproducibility
+
+n <- 100 # Number of observations.
+p <- 50  # Number of parameters (features) included in model.
+
+# Generate the data
+
+X <- matrix(rnorm(n*p), nrow=n, ncol=p)   # Randomly generated design matrix.
+y <- apply(X[,1:5],1,sum) + rnorm(n)      # Set up y as linearly dependent the first 5 X's and some noise.
+
+
+
+#==============================
+# Loss Function
+#==============================
+
+func_var_multi <- function(X,l,y){
+ loss <- 1/2*(t(l)%*%solve(t(X)%*%X)%*%l - t(l)%*%(solve(t(X)%*%X)%*%t(X)%*%y))
+ return(loss)
+}
+
+
+#===============================
+# Box Projection (-a<=lambda<=a)
+#===============================
+proj_box<-function(l,a,b)
+{ 
+  lambda=l
+  if (l>b){lambda=b}
+  else if (lambda<a) {lambda=a}
+  return(lambda)
+  
+}
+
+proj_c<-function(l,a,b)
+{
+pc=proj_box(l,a,b)
+return(pc)
+}
+
+
+
+#=================================
+# Gradient Approximation
+#=================================
+
+grad_vec<-function(X,l,y)
+{ delx=0.0001
+grad_vec=c()
+for(i in 1:length(l))
+{ l_old=l
+l_new=l
+l_old[i]=l[i]-delx
+l_new[i]=l[i]+delx
+grad_vec[i]=(func_var_multi(X,l_new,y)-func_var_multi(X,l_old,y))/(2*delx)
+}
+return(grad_vec)  
+}
+
+
+
+
+#=============================
+# Projected Gradient Scheme
+#=============================
+
+proj_grad<-function(X,l,y,alpha,a,b,epsilon,max_iter)
+{
+  n_iter=0
+  l_old=l
+  
+  for(k in 0:max_iter)
+  {
+    n_iter=n_iter+1
+    f_old=func_var_multi(X,l_old,y)
+    g_old=grad_vec(X,l_old,y)
+    d_old<- -g_old
+    l_new_interm=l_old+alpha*d_old  # perhaps not in C
+
+    l_new=c()
+    for(j in 1:length(l_new_interm)){
+    l_new[j]=proj_c(l_new_interm[j],a,b)    # this is the projection step
+    }
+
+    f_new=func_var_multi(X,l_new,y)
+    g_new=grad_vec(X,l_new,y)
+    if(abs(f_new-f_old)<epsilon | norm(l_new-l_old,"2")<epsilon)
+      # if(norm(grad,"2")<epsilon)
+    {break}
+    l_old=l_new
+    f_old=f_new
+    g_old=g_new
+  }
+    l_min=l_new
+    f_min=func_var_multi(X,l_min,y)
+    g_min=grad_vec(X,l_min,y)
+    n_g_min=norm(g_min,"2")
+    results=list(l_min,f_min,n_g_min,n_iter)
+    return(results)
+}
+
+
+
+
+#======================
+# Execute
+#======================
+a <- 1  # Lasso Regression Coefficient
+upper.bound <- a
+lower.bound <- -a
+lambda.init <- rep(0.1, times=ncol(X))
+alpha <- 0.1
+epsilon=1e-07
+max.iter <- 100
+results <- proj_grad(X, lambda.init, y, alpha, lower.bound, upper.bound, epsilon, max.iter)
+results
+
+
+w <- solve(t(X)%*%X)%*%(t(X)%*%y-results[[1]])
+w

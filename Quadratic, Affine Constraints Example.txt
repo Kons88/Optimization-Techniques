@@ -1,0 +1,84 @@
+#=======================================================
+# Insert our data of the quadratic and the constraints.
+#=======================================================
+
+Q <- matrix(c(3,0,0,1), ncol=2)
+q <- c(1,-5)
+b <- c(8,-5)
+A <- matrix(c(-4,1,2,0), ncol=2)
+
+
+#================================================
+# The Function to be Minimized Under Constraints
+#================================================
+
+Lagrangian <- function(x,Q,q,A,b,l){
+	L=1/2*(t(x)%*%Q%*%x)+t(q)%*%x+t(l)%*%A%*%x-t(l)%*%b
+	return(L)
+}
+
+
+
+#==========================
+# Positive Cone Projection
+#==========================
+
+proj_pos_cone<-function(x)
+{
+  n=length(x)
+  px=rep(0,n)
+  for (i in 1:n){
+    px[i]=max(x[i],0)
+  }
+  
+  return(px)
+}
+
+
+proj_c<-function(x)
+{
+  pc=proj_pos_cone(x)
+  return(pc)
+}
+
+
+#==========================
+# Gradient Calculation
+#==========================
+
+gradient <- function(x,Q,q,A,b,l,alpha,max.iter){
+  lold <- l
+  xold <- x
+  L_history <- c()
+   for(i in 1:max.iter){
+    xnew <- xold - alpha*(Q%*%xold+q+t(A)%*%lold) # Gradient Descent for x.
+    lambda_int <- lold + alpha*(A%*%xold+b)       # Gradient Ascent for lambda.
+    lnew <- proj_c(lambda_int)                    # Projected Gradient Ascent for lambda.
+    xold <- xnew
+    lold <- lnew
+    L_history[i] <- Lagrangian (xold,Q,q,A,b,lold)
+   }
+  results <- list(xnew,lnew,L_history)
+  return(results)
+}
+
+
+
+#=====================
+# Execute
+#=====================
+
+xinit <- c(1,-3)   # Based on the constraints.
+linit <- c(0.1,0.1)
+alpha <- 0.1
+max.iter <- 1000
+
+results <- gradient(xinit,Q,q,A,b,linit,alpha,max.iter)
+
+# Our estimated x's.
+results[[1]]
+
+# Our estimated lambda's.
+results[[2]]
+
+plot(results[[3]])

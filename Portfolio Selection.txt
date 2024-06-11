@@ -1,0 +1,208 @@
+##################################################
+# AUXILIARY
+#
+#
+
+
+#########################
+#
+#  calculate the grad vector for a funcion func_var_multi
+#
+#############################
+
+grad_vec<-function(x)
+{ delx=0.0001
+grad_vec=c()
+for(i in 1:length(x))
+{ x_old=x
+x_new=x
+x_old=x
+x_old[i]=x[i]-delx
+x_new[i]=x[i]+delx
+grad_vec[i]=(func_var_multi(x_new)-func_var_multi(x_old))/(2*delx)
+}
+return(grad_vec)  
+}
+
+# compute the Hessian numerically for a function func_var_multi
+
+hessian<-function(x)
+{
+  delx=0.001
+  hessian=matrix(1,nrow=length(x),ncol=length(x))  # initialize a matrix of 1s
+  temp=c()
+  for(i in 1:length(x))
+  { for(j in 1:length(x))
+  {
+    if(i==j)
+    { x_old=x
+    x_new=x
+    x_old[i]=x[i]-delx
+    x_new[i]=x[i]+delx
+    gt_old=grad_vec(x_old)
+    gt_new=grad_vec(x_new)
+    hessian[i,i]=(gt_new[i]-gt_old[i])/(2*delx)}
+    else
+    { x_old=x
+    x_new=x
+    x_old[i]=x[i]-delx
+    x_new[i]=x[i]+delx
+    gt_old=grad_vec(x_old)
+    gt_new=grad_vec(x_new)
+    hessian[i,j]=(gt_new[j]-gt_old[j])/(2*delx)}
+    hessian[j,i]=hessian[i,j]
+  }
+  }
+  return(hessian)
+}
+
+
+
+
+###############################
+#
+# golden linesearch for minimization along the 
+# direction sig
+#
+#####################################
+
+golden_line_search<-function(a,b,x,sig,epsilon,max_iter)
+{
+  tau = 0.381967   # golden section
+  alpha1 = a*(1-tau) + b*tau
+  alpha2 = a*tau + b*(1-tau)
+  falpha1 = func_var_multi(x+alpha1*sig)
+  falpha2 = func_var_multi(x+alpha2*sig)
+  for (k in 1:max_iter)
+  {
+    if(falpha1>falpha2)
+    {
+      a = alpha1
+      alpha1 = alpha2
+      falpha1 = falpha2
+      alpha2 = tau*a + (1-tau)*b
+      falpha2 = func_var_multi(x+alpha2*sig) 
+      
+    }
+    else
+    {
+      b = alpha2
+      alpha2 = alpha1
+      falpha2 = falpha1
+      alpha1 = tau*b + (1-tau)*a
+      falpha1 = func_var_multi(x+alpha1*sig)
+    }
+    if (abs(func_var_multi(x+alpha1*sig)-func_var_multi(x+alpha2*sig))< epsilon)
+    {break}
+  }
+  golden=c(alpha1 , falpha1)
+  return(golden)
+}
+
+
+
+#  backline search   rho=0.7 for quasinewton  rho=0.9 for newton
+bls <- function(x, dx, alpha=1e-04, rho=0.7 ) {
+  fx=func_var_multi(x)   #value of function at x
+  gx=grad_vec(x)         # value of gradient at x
+  max_iter <- 500
+  t <- 1
+  iter <- 0
+  while ( func_var_multi(x+t*dx)>=fx+alpha*t*sum(gx*dx) && iter<max_iter){
+    iter <- iter + 1
+    t <- rho*t 
+  }
+  return(t)  }
+
+###########################################################################################
+###########################################################################################
+###########################################################################################
+
+#=====================
+# Data Setup
+#=====================
+X <- matrix(c(12,12.1,14,10,11.9,5,6.5,8,5.1,5.5,6,6.1,4.5,6.7,6.8), ncol=3)
+S <- cov(X)
+
+func_var_multi<-function(x)
+{
+  fx <- as.vector(x)%*%S%*%as.vector(x)
+  return(fx)
+}
+
+
+# set up constraints
+c_par=colMeans(X)
+d_par=8
+
+A <- matrix(c(c_par, 1,1,1), ncol = 3, byrow = T)
+b <- matrix(c(d_par,1), nrow = 2)
+
+
+
+
+#=====================
+# Affine - Projection 
+#=====================
+
+proj_affine<-function(x,A,b)
+{
+  mat=A%*%t(A)
+  invmat=solve(mat)
+  mat1=t(A)%*%invmat
+  vec=A%*%x-b
+  pr1=mat1%*%vec
+  px=x-pr1
+  return(px)
+  
+}
+
+proj_c<-function(x)
+{
+  pc=proj_affine(x,A,b)
+  return(pc)
+}
+
+
+#=======================
+# Projection Gradient
+#=======================
+
+proj_grad<-function(x,alpha,epsilon,max_iter)
+{
+  n_iter=0
+  x_old=x
+  
+  for(k in 0:max_iter)
+  {
+    n_iter=n_iter+1
+    f_old=func_var_multi(x_old)
+    g_old=grad_vec(x_old)
+    d_old<- -g_old
+    x_new_interm=x_old+alpha*d_old  # perhaps not in C
+    x_new=proj_c(x_new_interm)    # this is the rojection step
+    f_new=func_var_multi(x_new)
+    g_new=grad_vec(x_new)
+    if(abs(f_new-f_old)<epsilon | norm(x_new-x_old,"2")<epsilon)
+      # if(norm(grad,"2")<epsilon)
+    {break}
+    x_old=x_new
+    f_old=f_new
+    g_old=g_new
+  }
+    x_min=x_new
+    f_min=func_var_multi(x_min)
+    g_min=grad_vec(x_min)
+    n_g_min=norm(g_min,"2")
+    results=list(x_min,f_min,n_g_min,n_iter)
+    return(results)
+  }
+
+
+
+x_init=rep(0, length(X[1,]))
+alpha=0.1
+epsilon=1e-07
+max_iter=100
+results=proj_grad(x_init,alpha,epsilon,max_iter)
+results

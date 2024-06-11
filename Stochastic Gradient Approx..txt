@@ -1,0 +1,100 @@
+#==================================
+# Generate mock data by simulation
+#==================================
+n_features=2
+n_data=10000
+set.seed(666)
+x1 = rnorm(n_data, 0, 1)     # some continuous variables 
+x2 = rnorm(n_data, 0, 1)
+z = 1 + 2*x1 + 3*x2        # linear combination with a bias
+
+X<-cbind(rep(1,n_data), x1, x2)  # combine all our parameters in a single matrix
+
+pr = 1/(1+exp(-z))         # our sigmoid/probability function
+y = rbinom(length(x1),1,pr)      # bernoulli response variable
+
+model.1 <- glm(y~x1+x2, family="binomial")
+theta_true <- coef(model.1)  # the true values of coefficients
+
+theta_init<-rep(0,n_features+1)   # initialize theta
+
+
+#=====================================
+# The Loss Function to be Minimized
+#=====================================
+Loss<-function(x,y,theta){
+ L= sum(x%*%theta+log(1+exp(-x%*%theta))-y*(x%*%theta)) 
+ return(L)
+}
+
+
+
+#==========================================
+# Compute the Gradient Numerically
+#==========================================
+
+grad_vec<-function(x,y,theta)
+{ delx=0.0001
+grad_vec=c()
+for(i in 1:length(theta))
+	{ t_old=theta
+	t_new=theta
+	t_old[i]=theta[i]-delx
+	t_new[i]=theta[i]+delx
+	grad_vec[i]=(Loss(x,y,t_new)-Loss(x,y,t_old))/(2*delx)
+	}
+return(grad_vec)  
+}
+
+
+
+#================================================================================
+# We have the gradient, but what we want is to break it in two matrices t(X)%*%E
+# as is described by the lectures. Thus we will multiply our gradient by the 
+# Moore-Penrose pseudo-inverse matrix (because we cannot invert it normally 
+# since it's a 10000x3 matrix) in order to get the E matrix which has the errors
+# of our model.
+#================================================================================
+
+library(MASS)
+X.inv <- ginv(t(X))
+E <- X.inv%*%grad_vec(X,y,theta_init)
+
+
+
+#==============================
+# Stochastic gradient descent
+#==============================
+stochastic_gradient_descent<-function(X,y,thetaa,alpha,max_iter){  #max_iter=N
+  theta_sg<-thetaa  # initialize
+  L_history_sg<-rep(0,max_iter)   # this is number of iterations
+  for(i in 1:max_iter){
+    factor=E[i]
+    direction=X[i,]
+    theta_sg<-theta_sg-alpha*as.vector(factor)*direction  # here we calculate
+    # the gradient explicitly but only for the i-th datum
+    L_history_sg[i]<-Loss(X,y,theta_sg)
+  }
+  results<-list(theta_sg,L_history_sg)
+  return(results)
+}
+
+
+#=================
+# now execute 
+#=================
+alpha_sg<-0.001
+max_iter<-10000
+results_sg<-stochastic_gradient_descent(X,y,theta_init,alpha_sg,max_iter)
+theta_sg<-results_sg[[1]] # retrieve theta vector
+L_history_sg<-results_sg[[2]] # retrieve L_history
+
+# compare theta with theta_true
+
+theta_true
+
+theta_sg
+
+# plot Loss function as a function of the iteration number
+
+plot(L_history_sg)
